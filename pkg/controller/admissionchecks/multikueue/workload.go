@@ -42,12 +42,15 @@ import (
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
 	"sigs.k8s.io/kueue/pkg/util/admissioncheck"
 	"sigs.k8s.io/kueue/pkg/workload"
+
+	kftraining "github.com/kubeflow/training-operator/pkg/apis/kubeflow.org/v1"
 )
 
 var (
 	adapters = map[string]jobAdapter{
-		batchv1.SchemeGroupVersion.WithKind("Job").String():   &batchJobAdapter{},
-		jobset.SchemeGroupVersion.WithKind("JobSet").String(): &jobsetAdapter{},
+		batchv1.SchemeGroupVersion.WithKind("Job").String():           &batchJobAdapter{},
+		jobset.SchemeGroupVersion.WithKind("JobSet").String():         &jobsetAdapter{},
+		kftraining.SchemeGroupVersion.WithKind("PyTorchJob").String(): &pytorchJobAdapter{},
 	}
 
 	errNoActiveClusters = errors.New("no active clusters")

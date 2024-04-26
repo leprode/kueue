@@ -24,6 +24,7 @@ import (
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	jobset "sigs.k8s.io/jobset/api/jobset/v1alpha2"
 
+	kftraining "github.com/kubeflow/training-operator/pkg/apis/kubeflow.org/v1"
 	"sigs.k8s.io/kueue/pkg/controller/constants"
 )
 
@@ -34,7 +35,9 @@ var (
 	queueNameLabelPath            = labelsPath.Key(constants.QueueLabel)
 	workloadPriorityClassNamePath = labelsPath.Key(constants.WorkloadPriorityClassLabel)
 	supportedPrebuiltWlJobGVKs    = sets.New(batchv1.SchemeGroupVersion.WithKind("Job").String(),
-		jobset.SchemeGroupVersion.WithKind("JobSet").String())
+		jobset.SchemeGroupVersion.WithKind("JobSet").String(),
+		kftraining.SchemeGroupVersion.WithKind("PyTorchJob").String(),
+	)
 )
 
 func ValidateCreateForQueueName(job GenericJob) field.ErrorList {
