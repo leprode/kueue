@@ -17,8 +17,12 @@ package multikueue
 
 import (
 	"context"
+	"errors"
+	"fmt"
 
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/klog/v2"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	kueuealpha "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
@@ -80,4 +84,22 @@ func (b *pytorchJobAdapter) KeepAdmissionCheckPending() bool {
 
 func (b *pytorchJobAdapter) IsJobManagedByKueue(_ context.Context, _ client.Client, _ types.NamespacedName) (bool, string, error) {
 	return true, "", nil
+}
+
+func (*pytorchJobAdapter) GetEmptyList() client.ObjectList {
+	return &kftraining.PyTorchJobList{}
+}
+
+func (*pytorchJobAdapter) GetWorkloadKey(o runtime.Object) (types.NamespacedName, error) {
+	pytorchJob, isPyTorchJob := o.(*kftraining.PyTorchJob)
+	if !isPyTorchJob {
+		return types.NamespacedName{}, errors.New("not a pytorchjob")
+	}
+
+	prebuiltWl, hasPrebuiltWorkload := pytorchJob.Labels[constants.PrebuiltWorkloadLabel]
+	if !hasPrebuiltWorkload {
+		return types.NamespacedName{}, fmt.Errorf("no prebuilt workload found for pytorchjob: %s", klog.KObj(pytorchJob))
+	}
+
+	return types.NamespacedName{Name: prebuiltWl, Namespace: pytorchJob.Namespace}, nil
 }
