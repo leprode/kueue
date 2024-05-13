@@ -40,6 +40,7 @@ import (
 
 	kueuealpha "sigs.k8s.io/kueue/apis/kueue/v1alpha1"
 	kueue "sigs.k8s.io/kueue/apis/kueue/v1beta1"
+	"sigs.k8s.io/kueue/pkg/controller/constants"
 	"sigs.k8s.io/kueue/pkg/util/admissioncheck"
 	"sigs.k8s.io/kueue/pkg/workload"
 
@@ -331,6 +332,12 @@ func (a *wlReconciler) reconcileGroup(ctx context.Context, group *wlGroup) error
 	}
 
 	// finally - create missing workloads
+	// if SpecifyClusterLabel is existed, the cloned pytorchJob only created in specify cluster.
+	hasSpecifyClusterLabel, err := a.createdBySpecifyClusterLabel(ctx, group)
+	if hasSpecifyClusterLabel {
+		return err
+	}
+
 	var errs []error
 	for rem, remWl := range group.remotes {
 		if remWl == nil {
@@ -344,6 +351,55 @@ func (a *wlReconciler) reconcileGroup(ctx context.Context, group *wlGroup) error
 		}
 	}
 	return errors.Join(errs...)
+}
+
+func (a *wlReconciler) createdBySpecifyClusterLabel(ctx context.Context, group *wlGroup) (bool, error) {
+	log := ctrl.LoggerFrom(ctx).WithValues("op", "createdBySpecifyClusterLabel")
+
+	var adapterKey string
+	if controller := metav1.GetControllerOf(group.local); controller != nil {
+		adapterKey = schema.FromAPIVersionAndKind(controller.APIVersion, controller.Kind).String()
+	}
+	if adapterKey != kftraining.SchemeGroupVersion.WithKind("PyTorchJob").String() {
+		return false, nil
+	}
+	log.V(3).Info("try to create pytorchJob in worker cluster")
+
+	localJob := kftraining.PyTorchJob{}
+	err := a.client.Get(ctx, group.controllerKey, &localJob)
+	if err != nil {
+		return false, err
+	}
+
+	rem := localJob.Labels[constants.SpecifyClusterLabel]
+	log.V(3).Info(fmt.Sprintf("localJob.Labels[constants.SpecifyClusterLabel] is %v", rem))
+	if rem == "" {
+		return false, nil
+	}
+
+	remWl, ok := group.remotes[rem]
+	if !ok {
+		log.V(2).Info(fmt.Sprintf("the worker cluster[%v] specified by the job does not existed!!!", rem))
+		// update the message
+		acs := workload.FindAdmissionCheck(group.local.Status.AdmissionChecks, group.acName)
+		acs.Message = fmt.Sprintf("The workload cloudn't find the specified cluster named %q", rem)
+		wlPatch := workload.BaseSSAWorkload(group.local)
+		workload.SetAdmissionCheckState(&wlPatch.Status.AdmissionChecks, *acs)
+		err := a.client.Status().Patch(ctx, wlPatch, client.Apply, client.FieldOwner(ControllerName), client.ForceOwnership)
+		return true, err
+	}
+
+	if remWl == nil {
+		log.V(3).Info(fmt.Sprintf("create workload in remote cluster[%v]", rem))
+		clone := cloneForCreate(group.local, group.remoteClients[rem].origin)
+		err := group.remoteClients[rem].client.Create(ctx, clone)
+		if err != nil {
+			// just log the error for a single remote
+			log.V(2).Error(err, "creating remote object", "remote", rem)
+			return true, err
+		}
+	}
+	return true, nil
 }
 
 func newWlReconciler(c client.Client, helper *multiKueueStoreHelper, cRec *clustersReconciler, origin string) *wlReconciler {

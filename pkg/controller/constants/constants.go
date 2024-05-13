@@ -28,6 +28,9 @@ const (
 	// PrebuiltWorkloadLabel is the label key of the job holding the name of the pre-built workload to use.
 	PrebuiltWorkloadLabel = "kueue.x-k8s.io/prebuilt-workload-name"
 
+	// SpecifyClusterLabel is the label key of the job indicating which cluster is expected to deliver.
+	SpecifyClusterLabel = "kueue.x-k8s.io/running-cluster"
+
 	// ParentWorkloadAnnotation is the annotation used to mark a kubernetes Job
 	// as a child of a Workload. The value is the name of the workload,
 	// in the same namespace. It is used when the parent workload corresponds to
